@@ -58,20 +58,19 @@ if selected_pois and col_exists("POIコード"):
 
 # ---------------- 地図表示 ----------------
 if col_exists("緯度") and col_exists("経度"):
-    map_df = filtered.rename(columns={"緯度": "latitude", "経度": "longitude"})
-    st.map(map_df)
-else:
-    st.info("地図を表示するには『緯度』『経度』の列が必要です。")
+    map_df = filtered.rename(columns={"緯度": "latitude", "経度": "longitude"}).copy()
 
-# ---------------- 表示 ----------------
-st.subheader(f"📋 絞り込まれた施設一覧（{len(filtered)} 件）")
+    # ❗ 只保留数值类型的经纬度，删除空值或非法字符
+    map_df["latitude"] = pd.to_numeric(map_df["latitude"], errors="coerce")
+    map_df["longitude"] = pd.to_numeric(map_df["longitude"], errors="coerce")
+    map_df = map_df.dropna(subset=["latitude", "longitude"])
 
-# 表示用の列：存在するものだけ抽出
-display_cols = [col for col in ["名称", "名称_通称", "所在地_連結表記", "電話番号", "URL"] if col_exists(col)]
-if display_cols:
-    st.dataframe(filtered[display_cols].reset_index(drop=True), use_container_width=True)
+    if not map_df.empty:
+        st.map(map_df)
+    else:
+        st.info("📍 フィルタ後、有効な緯度・経度が含まれていないため、地図を表示できません。")
 else:
-    st.warning("⚠️ 表示用の主要な列（名称など）が見つかりません。")
+    st.info("⚠️ 緯度・経度の列が見つかりません。地図は非表示になります。")
 
 # ---------------- CSV ダウンロード ----------------
 csv_buffer = StringIO()
