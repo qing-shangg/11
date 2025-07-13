@@ -17,13 +17,13 @@ with st.sidebar:
     st.header("検索条件")
     selected_type = st.selectbox(
         "施設タイプ",
-        ["全て"] + list(df['施設分類'].unique())
+        ["全て"] + list(df['説明'].unique())
     )
     min_reviews = st.slider("最小レビュー数", 0, 300, 50)
 
 # 数据过滤
 if selected_type != "全て":
-    df = df[df['施設分類'] == selected_type]
+    df = df[df['説明'] == selected_type]
 df = df[df['reviews'] >= min_reviews]
 
 # 显示结果
