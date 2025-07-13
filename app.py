@@ -10,63 +10,76 @@ st.title("🏛️ 金沢公共施設マップ")
 @st.cache_data
 def load_data():
     df = pd.read_csv("processed_facilities.csv")
-    df.columns = df.columns.str.strip()          # 余計な空白対策
+    df.columns = df.columns.str.strip()  # 列名前后空白去除
     return df
 
 df = load_data()
 
+# ---------------- 列存在チェック ----------------
+def col_exists(col):
+    return col in df.columns
+
 # ---------------- サイドバー ----------------
 with st.sidebar:
-    st.header("🔍 フィルタ")
+    st.header("🔍 検索・絞り込み")
 
-    # キーワード検索（名称・通称）
-    keyword = st.text_input("キーワード（名称・通称）で検索", placeholder="例）ホール / 美術館")
+    # キーワード検索
+    keyword = st.text_input("キーワード検索（名称/通称）", placeholder="例）文化、図書館、体育館")
 
-    # POIコードでの絞り込み（任意）
-    if "POIコード" in df.columns:
+    # POIコードで絞る
+    if col_exists("POIコード"):
         poi_options = sorted(df["POIコード"].dropna().unique().tolist())
-        poi_selected = st.multiselect("POIコードで絞り込み（複数選択可）", poi_options)
+        selected_pois = st.multiselect("POIコードでフィルター", poi_options)
     else:
-        poi_selected = []
-
-    # ダウンロードボタンを先に用意（後でデータを渡す）
-    download_btn = st.empty()
+        selected_pois = []
+        st.caption("⚠️ POIコード列が存在しないためフィルター不可")
 
 # ---------------- データフィルタ ----------------
 filtered = df.copy()
 
+# キーワードフィルタ（名称 & 名称_通称）
 if keyword:
-    # 名称・通称どちらにもヒットするように
-    mask_name = filtered["名称"].fillna("").str.contains(keyword, case=False, na=False)
-    mask_nickname = filtered["名称_通称"].fillna("").str.contains(keyword, case=False, na=False) \
-                    if "名称_通称" in filtered.columns else False
-    filtered = filtered[mask_name | mask_nickname]
+    conditions = []
+    if col_exists("名称"):
+        conditions.append(filtered["名称"].astype(str).str.contains(keyword, case=False, na=False))
+    if col_exists("名称_通称"):
+        conditions.append(filtered["名称_通称"].astype(str).str.contains(keyword, case=False, na=False))
+    if conditions:
+        combined = conditions[0]
+        for cond in conditions[1:]:
+            combined |= cond
+        filtered = filtered[combined]
+    else:
+        st.warning("⚠️ 検索対象の列（名称/通称）が見つかりません。")
 
-if poi_selected:
-    filtered = filtered[filtered["POIコード"].isin(poi_selected)]
+# POIコードフィルタ
+if selected_pois and col_exists("POIコード"):
+    filtered = filtered[filtered["POIコード"].isin(selected_pois)]
 
-# ---------------- 地図描画 ----------------
-if {"緯度", "経度"}.issubset(filtered.columns):
-    geo = filtered.rename(columns={"緯度": "latitude", "経度": "longitude"})
-    st.map(geo)
+# ---------------- 地図表示 ----------------
+if col_exists("緯度") and col_exists("経度"):
+    map_df = filtered.rename(columns={"緯度": "latitude", "経度": "longitude"})
+    st.map(map_df)
 else:
-    st.warning("緯度・経度の列が見つからないため、地図を表示できません。")
+    st.info("地図を表示するには『緯度』『経度』の列が必要です。")
 
 # ---------------- 表示 ----------------
-st.subheader(f"📋 施設一覧（{len(filtered)} 件）")
+st.subheader(f"📋 絞り込まれた施設一覧（{len(filtered)} 件）")
 
-# 表示用に主要列だけ抽出；存在しない列はスキップ
-display_cols = [c for c in ["名称", "名称_通称", "所在地_連結表記", "電話番号", "URL"] if c in filtered.columns]
-st.dataframe(filtered[display_cols].reset_index(drop=True), use_container_width=True)
+# 表示用の列：存在するものだけ抽出
+display_cols = [col for col in ["名称", "名称_通称", "所在地_連結表記", "電話番号", "URL"] if col_exists(col)]
+if display_cols:
+    st.dataframe(filtered[display_cols].reset_index(drop=True), use_container_width=True)
+else:
+    st.warning("⚠️ 表示用の主要な列（名称など）が見つかりません。")
 
 # ---------------- CSV ダウンロード ----------------
 csv_buffer = StringIO()
 filtered.to_csv(csv_buffer, index=False)
-download_btn.download_button(
-    label="📥 表示中のデータを CSV でダウンロード",
+st.download_button(
+    label="📥 絞り込み結果をCSVでダウンロード",
     data=csv_buffer.getvalue(),
-    file_name="facilities_filtered.csv",
+    file_name="filtered_facilities.csv",
     mime="text/csv",
     use_container_width=True
 )
-
