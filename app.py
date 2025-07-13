@@ -8,7 +8,7 @@ st.title("🏛️ 金沢公共施設ガイド")
 # 加载数据
 @st.cache_data
 def load_data():
-    return pd.read_csv("facilities_processed.csv")
+    return pd.read_csv("processed_facilities.csv")
 
 df = load_data()
 
